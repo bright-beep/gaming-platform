@@ -91,3 +91,144 @@
         )
     )
 )
+
+;; ============================================================================
+;; Public Functions
+;; ============================================================================
+
+;; Administrative Functions
+(define-public (add-game-admin (new-admin principal))
+    (begin
+        (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+        (asserts! (is-safe-principal new-admin) ERR-INVALID-INPUT)
+        (map-set game-admin-whitelist new-admin true)
+        (ok true)
+    )
+)
+
+(define-public (initialize-game 
+    (entry-fee uint) 
+    (max-entries uint)
+)
+    (begin
+        (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+        (asserts! (and (>= entry-fee u1) (<= entry-fee u1000)) ERR-INVALID-FEE)
+        (asserts! (and (>= max-entries u1) (<= max-entries u500)) ERR-INVALID-ENTRIES)
+        
+        (var-set game-fee entry-fee)
+        (var-set max-leaderboard-entries max-entries)
+        
+        (ok true)
+    )
+)
+
+;; Asset Management Functions
+(define-public (mint-game-asset 
+    (name (string-ascii 50))
+    (description (string-ascii 200))
+    (rarity (string-ascii 20))
+    (power-level uint)
+)
+    (let 
+        (
+            (token-id (+ (var-get total-game-assets) u1))
+        )
+        (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+        (asserts! (is-valid-string name) ERR-INVALID-INPUT)
+        (asserts! (is-valid-string description) ERR-INVALID-INPUT)
+        (asserts! (is-valid-string rarity) ERR-INVALID-INPUT)
+        (asserts! (and (>= power-level u0) (<= power-level u1000)) ERR-INVALID-INPUT)
+        
+        (try! (nft-mint? game-asset token-id tx-sender))
+        
+        (map-set game-asset-metadata 
+            { token-id: token-id }
+            {
+                name: name,
+                description: description, 
+                rarity: rarity,
+                power-level: power-level
+            }
+        )
+        
+        (var-set total-game-assets token-id)
+        
+        (ok token-id)
+    )
+)
+
+(define-public (transfer-game-asset 
+    (token-id uint) 
+    (recipient principal)
+)
+    (begin
+        (asserts! 
+            (is-eq tx-sender (unwrap! (nft-get-owner? game-asset token-id) ERR-INVALID-GAME-ASSET))
+            ERR-NOT-AUTHORIZED
+        )
+        
+        (asserts! (is-safe-principal recipient) ERR-INVALID-INPUT)
+        
+        (nft-transfer? game-asset token-id tx-sender recipient)
+    )
+)
+
+;; Player Management Functions
+(define-public (register-player)
+    (let 
+        (
+            (registration-fee (var-get game-fee))
+        )
+        (asserts! 
+            (>= (stx-get-balance tx-sender) registration-fee) 
+            ERR-INSUFFICIENT-FUNDS
+        )
+        
+        (asserts! 
+            (is-none (map-get? leaderboard { player: tx-sender }))
+            ERR-ALREADY-REGISTERED
+        )
+        
+        (try! (stx-transfer? registration-fee tx-sender (as-contract tx-sender)))
+        
+        (map-set leaderboard 
+            { player: tx-sender }
+            {
+                score: u0,
+                games-played: u0,
+                total-rewards: u0
+            }
+        )
+        
+        (ok true)
+    )
+)
+
+(define-public (update-player-score 
+    (player principal) 
+    (new-score uint)
+)
+    (let 
+        (
+            (current-stats (unwrap! 
+                (map-get? leaderboard { player: player }) 
+                ERR-PLAYER-NOT-FOUND
+            ))
+        )
+        (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+        (asserts! (is-safe-principal player) ERR-INVALID-INPUT)
+        (asserts! (and (>= new-score u0) (<= new-score u10000)) ERR-INVALID-SCORE)
+        
+        (map-set leaderboard 
+            { player: player }
+            (merge current-stats 
+                {
+                    score: new-score,
+                    games-played: (+ (get games-played current-stats) u1)
+                }
+            )
+        )
+        
+        (ok true)
+    )
+)
