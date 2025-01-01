@@ -60,3 +60,34 @@
 
 ;; Administrative Access Control
 (define-map game-admin-whitelist principal bool)
+
+;; ============================================================================
+;; Read-Only Functions
+;; ============================================================================
+
+;; Authorization Checks
+(define-read-only (is-game-admin (sender principal))
+    (default-to false (map-get? game-admin-whitelist sender))
+)
+
+;; Input Validation
+(define-read-only (is-valid-string (input (string-ascii 200)))
+    (> (len input) u0)
+)
+
+(define-read-only (is-valid-principal (input principal))
+    (and 
+        (not (is-eq input tx-sender))
+        (not (is-eq input (as-contract tx-sender)))
+    )
+)
+
+(define-read-only (is-safe-principal (input principal))
+    (and 
+        (is-valid-principal input)
+        (or 
+            (is-game-admin input)
+            (is-some (map-get? leaderboard { player: input }))
+        )
+    )
+)
