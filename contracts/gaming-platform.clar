@@ -19,3 +19,44 @@
 (define-constant ERR-INVALID-FEE (err u10))
 (define-constant ERR-INVALID-ENTRIES (err u11))
 (define-constant ERR-PLAYER-NOT-FOUND (err u12))
+
+;; ============================================================================
+;; Data Variables
+;; ============================================================================
+
+;; Game Configuration
+(define-data-var game-fee uint u10)
+(define-data-var max-leaderboard-entries uint u50)
+(define-data-var total-prize-pool uint u0)
+(define-data-var total-game-assets uint u0)
+
+;; ============================================================================
+;; Data Maps
+;; ============================================================================
+
+;; NFT Token Definition
+(define-non-fungible-token game-asset uint)
+
+;; Asset Metadata Storage
+(define-map game-asset-metadata 
+    { token-id: uint }
+    { 
+        name: (string-ascii 50),
+        description: (string-ascii 200),
+        rarity: (string-ascii 20),
+        power-level: uint
+    }
+)
+
+;; Player Statistics and Leaderboard
+(define-map leaderboard 
+    { player: principal }
+    { 
+        score: uint, 
+        games-played: uint,
+        total-rewards: uint 
+    }
+)
+
+;; Administrative Access Control
+(define-map game-admin-whitelist principal bool)
